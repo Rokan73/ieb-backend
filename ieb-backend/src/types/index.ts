@@ -1,16 +1,9 @@
-import { Request } from '@netlify/functions';
-
 export interface AuthUser {
   id: string;
   email: string;
   fullName: string;
   roles: string[];
   permissions: string[];
-}
-
-export interface AuthenticatedRequest extends Request {
-  user?: AuthUser;
-  requestId?: string;
 }
 
 export interface PaginationParams {
