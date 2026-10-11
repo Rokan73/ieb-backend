@@ -63,12 +63,14 @@ import { getDashboard } from '../../src/modules/dashboard/dashboard.service';
 function parseBody<T>(event: HandlerEvent): T {
   if (!event.body) return {} as T;
   try {
-    return JSON.parse(event.body) as T;
+    const raw = event.isBase64Encoded
+      ? Buffer.from(event.body, 'base64').toString('utf8')
+      : event.body;
+    return JSON.parse(raw) as T;
   } catch {
     throw new Error('Invalid JSON body');
   }
 }
-
 function getQuery(event: HandlerEvent): Record<string, string> {
   return (event.queryStringParameters || {}) as Record<string, string>;
 }
