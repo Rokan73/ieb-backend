@@ -1,0 +1,677 @@
+// IEB Backend Management System - Prisma Schema
+// Demo / Prototype for Institution of Engineers, Bangladesh
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// AUTH & RBAC
+// ============================================================
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  fullName      String    @map("full_name")
+  mobile        String?
+  isActive      Boolean   @default(true) @map("is_active")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  userRoles     UserRole[]
+  member        Member?
+  auditLogs     AuditLog[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  module      String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String @id @default(uuid())
+  roleId       String @map("role_id")
+  permissionId String @map("permission_id")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id     String @id @default(uuid())
+  userId String @map("user_id")
+  roleId String @map("role_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+// ============================================================
+// MEMBERSHIP CATEGORIES & MEMBERS
+// ============================================================
+
+model MembershipCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  eligibility String?
+  fee         Decimal  @default(0) @db.Decimal(12, 2)
+  status      String   @default("active") // active | inactive
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  members                 Member[]
+  membershipApplications  MembershipApplication[]
+  membershipRenewals      MembershipRenewal[]
+
+  @@map("membership_categories")
+}
+
+model Member {
+  id                    String    @id @default(uuid())
+  membershipNumber      String    @unique @map("membership_number")
+  userId                String?   @unique @map("user_id")
+  fullName              String    @map("full_name")
+  nameInBangla          String?   @map("name_in_bangla")
+  fatherName            String?   @map("father_name")
+  motherName            String?   @map("mother_name")
+  dateOfBirth           DateTime? @map("date_of_birth") @db.Date
+  gender                String?   // male | female | other
+  nationality           String?   @default("Bangladeshi")
+  nidPassport           String?   @map("nid_passport")
+  email                 String?
+  mobile                String?
+  alternatePhone        String?   @map("alternate_phone")
+  presentAddress        String?   @map("present_address")
+  permanentAddress      String?   @map("permanent_address")
+  district              String?
+  division              String?
+  engineeringDiscipline String?   @map("engineering_discipline")
+  academicQualification String?   @map("academic_qualification")
+  university            String?
+  graduationYear        Int?      @map("graduation_year")
+  professionalExperience String?  @map("professional_experience") @db.Text
+  currentOrganization   String?   @map("current_organization")
+  currentDesignation    String?   @map("current_designation")
+  categoryId            String    @map("category_id")
+  status                String    @default("active") // active | pending | suspended | expired | cancelled | deceased
+  joiningDate           DateTime? @map("joining_date") @db.Date
+  expiryDate            DateTime? @map("expiry_date") @db.Date
+  profilePhotoUrl       String?   @map("profile_photo_url")
+  signatureUrl          String?   @map("signature_url")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user                    User?                   @relation(fields: [userId], references: [id])
+  category                MembershipCategory      @relation(fields: [categoryId], references: [id])
+  membershipApplications  MembershipApplication[]
+  membershipRenewals      MembershipRenewal[]
+  committeeMembers        CommitteeMember[]
+  eventRegistrations      EventRegistration[]
+  professionalRegistrations ProfessionalRegistration[]
+  tickets                   Ticket[]
+
+  @@index([status])
+  @@index([engineeringDiscipline])
+  @@index([district])
+  @@index([fullName])
+  @@map("members")
+}
+
+// ============================================================
+// MEMBERSHIP APPLICATIONS
+// ============================================================
+
+model MembershipApplication {
+  id                    String    @id @default(uuid())
+  applicationNumber     String    @unique @map("application_number")
+  applicantName         String    @map("applicant_name")
+  email                 String
+  mobile                String
+  dateOfBirth           DateTime? @map("date_of_birth") @db.Date
+  nidPassport           String?   @map("nid_passport")
+  address               String?
+  engineeringDiscipline String?   @map("engineering_discipline")
+  academicQualification String?   @map("academic_qualification")
+  university            String?
+  graduationYear        Int?      @map("graduation_year")
+  professionalExperience String?  @map("professional_experience") @db.Text
+  currentOrganization   String?   @map("current_organization")
+  designation           String?
+  requestedCategoryId   String    @map("requested_category_id")
+  declarationAccepted   Boolean   @default(false) @map("declaration_accepted")
+  status                String    @default("draft") // draft | submitted | payment_pending | under_review | query | resubmission_required | verified | recommended | approved | rejected | cancelled
+  memberId              String?   @unique @map("member_id") // set after approval
+  applicationDate       DateTime  @default(now()) @map("application_date")
+  reviewedBy            String?   @map("reviewed_by")
+  reviewedAt            DateTime? @map("reviewed_at")
+  approvedBy            String?   @map("approved_by")
+  approvedAt            DateTime? @map("approved_at")
+  rejectionReason       String?   @map("rejection_reason")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  requestedCategory MembershipCategory            @relation(fields: [requestedCategoryId], references: [id])
+  member            Member?                       @relation(fields: [memberId], references: [id])
+  documents         MembershipApplicationDocument[]
+  queries           ApplicationQuery[]
+  history           ApplicationHistory[]
+
+  @@index([status])
+  @@index([email])
+  @@map("membership_applications")
+}
+
+model MembershipApplicationDocument {
+  id               String    @id @default(uuid())
+  applicationId    String    @map("application_id")
+  documentType     String    @map("document_type") // academic_certificate | nid | photo | experience_letter | other
+  fileName         String    @map("file_name")
+  fileUrl          String    @map("file_url")
+  verificationStatus String  @default("pending") @map("verification_status") // pending | verified | rejected
+  uploadedAt       DateTime  @default(now()) @map("uploaded_at")
+  verifiedBy       String?   @map("verified_by")
+  verifiedAt       DateTime? @map("verified_at")
+  notes            String?
+
+  application MembershipApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("membership_application_documents")
+}
+
+model ApplicationQuery {
+  id            String    @id @default(uuid())
+  applicationId String    @map("application_id")
+  queryText     String    @map("query_text") @db.Text
+  raisedBy      String    @map("raised_by")
+  raisedAt      DateTime  @default(now()) @map("raised_at")
+  responseText  String?   @map("response_text") @db.Text
+  respondedAt   DateTime? @map("responded_at")
+  status        String    @default("open") // open | responded | closed
+
+  application MembershipApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("application_queries")
+}
+
+model ApplicationHistory {
+  id            String   @id @default(uuid())
+  applicationId String   @map("application_id")
+  action        String
+  fromStatus    String?  @map("from_status")
+  toStatus      String?  @map("to_status")
+  performedBy   String?  @map("performed_by")
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  application MembershipApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("application_history")
+}
+
+// ============================================================
+// MEMBERSHIP RENEWALS
+// ============================================================
+
+model MembershipRenewal {
+  id              String    @id @default(uuid())
+  renewalNumber   String    @unique @map("renewal_number")
+  memberId        String    @map("member_id")
+  categoryId      String    @map("category_id")
+  renewalPeriod   String    @map("renewal_period") // 1_year | 2_year | 5_year
+  feeAmount       Decimal   @default(0) @map("fee_amount") @db.Decimal(12, 2)
+  paymentStatus   String    @default("pending") @map("payment_status") // pending | paid | waived
+  status          String    @default("pending") // pending | payment_pending | under_review | approved | rejected | cancelled
+  contactEmail    String?   @map("contact_email")
+  contactMobile   String?   @map("contact_mobile")
+  requestedAt     DateTime  @default(now()) @map("requested_at")
+  reviewedBy      String?   @map("reviewed_by")
+  reviewedAt      DateTime? @map("reviewed_at")
+  approvedBy      String?   @map("approved_by")
+  approvedAt      DateTime? @map("approved_at")
+  rejectionReason String?   @map("rejection_reason")
+  newExpiryDate   DateTime? @map("new_expiry_date") @db.Date
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  member   Member             @relation(fields: [memberId], references: [id])
+  category MembershipCategory @relation(fields: [categoryId], references: [id])
+  history  RenewalHistory[]
+
+  @@index([status])
+  @@index([memberId])
+  @@map("membership_renewals")
+}
+
+model RenewalHistory {
+  id        String   @id @default(uuid())
+  renewalId String   @map("renewal_id")
+  action    String
+  fromStatus String? @map("from_status")
+  toStatus  String?  @map("to_status")
+  performedBy String? @map("performed_by")
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  renewal MembershipRenewal @relation(fields: [renewalId], references: [id], onDelete: Cascade)
+
+  @@map("renewal_history")
+}
+
+// ============================================================
+// COMMITTEES
+// ============================================================
+
+model CommitteeType {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  committees Committee[]
+
+  @@map("committee_types")
+}
+
+model Committee {
+  id          String    @id @default(uuid())
+  name        String
+  code        String    @unique
+  typeId      String    @map("type_id")
+  description String?   @db.Text
+  centre      String?
+  location    String?
+  startDate   DateTime? @map("start_date") @db.Date
+  endDate     DateTime? @map("end_date") @db.Date
+  status      String    @default("active") // active | inactive | expired
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  type    CommitteeType     @relation(fields: [typeId], references: [id])
+  members CommitteeMember[]
+
+  @@index([status])
+  @@map("committees")
+}
+
+model CommitteePosition {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  committeeMembers CommitteeMember[]
+
+  @@map("committee_positions")
+}
+
+model CommitteeMember {
+  id             String    @id @default(uuid())
+  committeeId    String    @map("committee_id")
+  memberId       String    @map("member_id")
+  positionId     String    @map("position_id")
+  appointmentDate DateTime? @map("appointment_date") @db.Date
+  startDate      DateTime? @map("start_date") @db.Date
+  endDate        DateTime? @map("end_date") @db.Date
+  status         String    @default("active") // active | completed | removed
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  committee Committee         @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+  member    Member            @relation(fields: [memberId], references: [id])
+  position  CommitteePosition @relation(fields: [positionId], references: [id])
+
+  @@unique([committeeId, memberId, positionId])
+  @@map("committee_members")
+}
+
+// ============================================================
+// EVENTS
+// ============================================================
+
+model EventType {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  events Event[]
+
+  @@map("event_types")
+}
+
+model Event {
+  id                String    @id @default(uuid())
+  eventCode         String    @unique @map("event_code")
+  name              String
+  typeId            String    @map("type_id")
+  description       String?   @db.Text
+  organizer         String?
+  centre            String?
+  venue             String?
+  isOnline          Boolean   @default(false) @map("is_online")
+  startDate         DateTime  @map("start_date") @db.Date
+  endDate           DateTime  @map("end_date") @db.Date
+  startTime         String?   @map("start_time")
+  endTime           String?   @map("end_time")
+  registrationStart DateTime? @map("registration_start")
+  registrationEnd   DateTime? @map("registration_end")
+  capacity          Int?
+  registrationFee   Decimal   @default(0) @map("registration_fee") @db.Decimal(12, 2)
+  status            String    @default("draft") // draft | published | registration_open | registration_closed | ongoing | completed | cancelled
+  featuredImageUrl  String?   @map("featured_image_url")
+  createdBy         String?   @map("created_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  type          EventType           @relation(fields: [typeId], references: [id])
+  registrations EventRegistration[]
+
+  @@index([status])
+  @@index([startDate])
+  @@map("events")
+}
+
+model EventRegistration {
+  id                 String    @id @default(uuid())
+  registrationNumber String    @unique @map("registration_number")
+  eventId            String    @map("event_id")
+  memberId           String?   @map("member_id")
+  name               String
+  email              String
+  mobile             String?
+  paymentStatus      String    @default("pending") @map("payment_status") // pending | paid | waived | free
+  attendanceStatus   String    @default("registered") @map("attendance_status") // registered | attended | absent | cancelled
+  registrationDate   DateTime  @default(now()) @map("registration_date")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  event  Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  member Member? @relation(fields: [memberId], references: [id])
+
+  @@unique([eventId, email])
+  @@index([eventId])
+  @@map("event_registrations")
+}
+
+// ============================================================
+// PROFESSIONAL REGISTRATION
+// ============================================================
+
+model RegistrationType {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  professionalRegistrations ProfessionalRegistration[]
+
+  @@map("registration_types")
+}
+
+model ProfessionalRegistration {
+  id                    String    @id @default(uuid())
+  applicationNumber     String    @unique @map("application_number")
+  registrationNumber    String?   @unique @map("registration_number") // generated on approval
+  memberId              String?   @map("member_id")
+  applicantName         String    @map("applicant_name")
+  email                 String
+  mobile                String?
+  registrationTypeId    String    @map("registration_type_id")
+  engineeringDiscipline String?   @map("engineering_discipline")
+  academicQualification String?   @map("academic_qualification")
+  university            String?
+  graduationYear        Int?      @map("graduation_year")
+  professionalExperience String?  @map("professional_experience") @db.Text
+  currentOrganization   String?   @map("current_organization")
+  designation           String?
+  experienceDetails     String?   @map("experience_details") @db.Text
+  status                String    @default("draft") // draft | submitted | under_review | query | document_verification | assessment | recommended | approved | rejected | cancelled
+  applicationDate       DateTime  @default(now()) @map("application_date")
+  reviewedBy            String?   @map("reviewed_by")
+  reviewedAt            DateTime? @map("reviewed_at")
+  approvedBy            String?   @map("approved_by")
+  approvedAt            DateTime? @map("approved_at")
+  rejectionReason       String?   @map("rejection_reason")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  registrationType RegistrationType        @relation(fields: [registrationTypeId], references: [id])
+  member           Member?                 @relation(fields: [memberId], references: [id])
+  documents        RegistrationDocument[]
+  history          RegistrationHistory[]
+  certificate      Certificate?
+
+  @@index([status])
+  @@map("professional_registrations")
+}
+
+model RegistrationDocument {
+  id                 String    @id @default(uuid())
+  registrationId     String    @map("registration_id")
+  documentType       String    @map("document_type")
+  fileName           String    @map("file_name")
+  fileUrl            String    @map("file_url")
+  verificationStatus String    @default("pending") @map("verification_status")
+  uploadedAt         DateTime  @default(now()) @map("uploaded_at")
+  verifiedBy         String?   @map("verified_by")
+  verifiedAt         DateTime? @map("verified_at")
+  notes              String?
+
+  registration ProfessionalRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@map("registration_documents")
+}
+
+model RegistrationHistory {
+  id             String   @id @default(uuid())
+  registrationId String   @map("registration_id")
+  action         String
+  fromStatus     String?  @map("from_status")
+  toStatus       String?  @map("to_status")
+  performedBy    String?  @map("performed_by")
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  registration ProfessionalRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@map("registration_history")
+}
+
+model Certificate {
+  id                 String    @id @default(uuid())
+  certificateNumber  String    @unique @map("certificate_number")
+  registrationId     String    @unique @map("registration_id")
+  registrationNumber String    @map("registration_number")
+  applicantName      String    @map("applicant_name")
+  engineeringDiscipline String? @map("engineering_discipline")
+  registrationType   String    @map("registration_type")
+  issueDate          DateTime  @map("issue_date") @db.Date
+  expiryDate         DateTime? @map("expiry_date") @db.Date
+  qrVerificationCode String    @unique @map("qr_verification_code")
+  verificationUrl    String    @map("verification_url")
+  status             String    @default("active") // active | expired | revoked
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  registration ProfessionalRegistration @relation(fields: [registrationId], references: [id])
+
+  @@map("certificates")
+}
+
+// ============================================================
+// NOTIFICATIONS & AUDIT
+// ============================================================
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String?   @map("user_id")
+  title     String
+  message   String    @db.Text
+  type      String    @default("info") // info | success | warning | error
+  isRead    Boolean   @default(false) @map("is_read")
+  link      String?
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String
+  module     String
+  recordId   String?  @map("record_id")
+  oldData    Json?    @map("old_data")
+  newData    Json?    @map("new_data")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([module, recordId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================
+// COMPLAINT & SERVICE MANAGEMENT (TICKETS)
+// ============================================================
+
+model TicketCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  type        String   // complaint | service_request
+  description String?
+  slaHours    Int      @default(72) @map("sla_hours")
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tickets Ticket[]
+
+  @@map("ticket_categories")
+}
+
+model Ticket {
+  id              String    @id @default(uuid())
+  ticketNumber    String    @unique @map("ticket_number")
+  type            String    // complaint | service_request
+  categoryId      String    @map("category_id")
+  subject         String
+  description     String    @db.Text
+  priority        String    @default("medium") // low | medium | high | urgent
+  status          String    @default("open") // open | assigned | in_progress | pending | resolved | closed | reopened
+  memberId        String?   @map("member_id")
+  requesterName   String    @map("requester_name")
+  requesterEmail  String    @map("requester_email")
+  requesterMobile String?   @map("requester_mobile")
+  assignedToId    String?   @map("assigned_to_id")
+  assignedAt      DateTime? @map("assigned_at")
+  slaDueAt        DateTime? @map("sla_due_at")
+  resolvedAt      DateTime? @map("resolved_at")
+  closedAt        DateTime? @map("closed_at")
+  resolution      String?   @db.Text
+  feedbackRating  Int?      @map("feedback_rating")
+  feedbackComment String?   @map("feedback_comment") @db.Text
+  createdById     String?   @map("created_by_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  category  TicketCategory  @relation(fields: [categoryId], references: [id])
+  member    Member?         @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  comments  TicketComment[]
+  history   TicketHistory[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([assignedToId])
+  @@map("tickets")
+}
+
+model TicketComment {
+  id         String   @id @default(uuid())
+  ticketId   String   @map("ticket_id")
+  authorId   String?  @map("author_id")
+  authorName String   @map("author_name")
+  body       String   @db.Text
+  isInternal Boolean  @default(false) @map("is_internal")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_comments")
+}
+
+model TicketHistory {
+  id          String   @id @default(uuid())
+  ticketId    String   @map("ticket_id")
+  action      String
+  fromStatus  String?  @map("from_status")
+  toStatus    String?  @map("to_status")
+  performedBy String?  @map("performed_by")
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_history")
+}
